@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import type { NextApiRequest, NextApiResponse } from 'next'
 import validator from 'validator'
+import bcrypt from "bcrypt";
+import * as jose from "jose";
 
 
 
@@ -48,10 +50,10 @@ export default async function handler(
     ]
     validationSchema.forEach((check) => {
       if (!check.valid) {
-        if (check.errorMessage) { // check if it exists before using it
+        if (check.errorMessage) {
           errors.push(check.errorMessage);
         } else {
-          errors.push('Validation error'); // fallback error message
+          errors.push('Validation error');
         }
       }
     });
@@ -71,8 +73,30 @@ export default async function handler(
         errorMessage: 'The email is already in use'
       })
     }
+    const hashedPassword = await bcrypt.hash(password, 10)
+    const user = await prisma.user.create({
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        password: hashedPassword,
+        email: email,
+        city: city,
+        phone: phone
+      }
+    })
+
+    const alg = 'HS256';
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET_KEY);
+    const token = await new jose.SignJWT({ email: user.email })
+      .setProtectedHeader({ alg })
+      .setExpirationTime('24h')
+      .sign(secret)
+    console.log('token: ' + token);
     res.status(200).json({
-      hello: 'body',
+      token
     })
   }
+  res.status(401).json({
+    message: 'Invalid Endpoint'
+  })
 }
